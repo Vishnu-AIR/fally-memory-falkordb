@@ -58,7 +58,7 @@ pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);borde
       <select id="tier"><option value="0">0 ordinary</option><option value="1" selected>1 personal</option><option value="2">2 intimate (needs relationships)</option></select></label></div>
   </div>
   <div class="card">
-    <h2>3. Ask</h2>
+    <h2>3. Ask <span class="ms">(every answer shows the Cypher it ran on FalkorDB)</span></h2>
     <div class="row"><input type="text" id="question" class="q" placeholder="What's open between me and Tomas?"><button id="ask">get_context</button></div>
     <div class="chips" id="examples"></div>
     <div id="result"></div>
@@ -121,6 +121,9 @@ async function ask(){const q=$("#question").value.trim();if(!q)return;const allo
  if(!r.sections.length)h+=`<p>${esc(r.text)}</p>`;
  r.sections.forEach(s=>{h+=`<div class="sec"><h3>${esc(s.title)} <span class="tag">${s.tier}</span></h3>`+s.items.map(i=>{const c=i.source;return `<div class="item">${esc(i.text)}${(i.categories||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}${c?`<div class="cite">${esc(c.title)} · ${esc(c.source_type)} · ${esc(c.when)}</div>`:""}${c&&c.quote&&i.kind!=="quote"?`<div class="quote">"${esc(c.quote)}"</div>`:""}</div>`}).join("")+`</div>`});
  h+=`<details><summary class="ms">Markdown text an AI receives</summary><pre>${esc(r.text)}</pre></details>`;
+ const fq=r.falkordb||[];if(fq.length){const sv=fq.reduce((a,x)=>a+(x.server_ms||0),0);
+  h+=`<details open><summary class="ms">FalkorDB: ${fq.length} Cypher queries on graph <b>${esc(fq[0].graph)}</b> · ${sv.toFixed(2)} ms server time</summary>`+
+  fq.map(x=>`<div class="item"><span class="tag">${esc(x.mode)}</span><span class="tag">${x.rows} rows</span><span class="tag">${x.server_ms??"?"} ms</span><pre style="white-space:pre-wrap;margin:4px 0 0">${esc(x.cypher)}</pre></div>`).join("")+`</details>`}
  $("#result").innerHTML=h;const ids=(r.resolved.people||[]).map(p=>p.uid);if(ids.length)nodeClick(ids[0])}catch(e){$("#result").innerHTML=`<p style="color:var(--warn)">${esc(e.message)}</p>`}}
 async function loadPeople(){const ps=await api(`/api/users/${user}/people`);
  $("#people").innerHTML=ps.map(p=>`<div class="p"><div><b>${esc(p.name)}</b> ${p.works_at.length?`<span class="muted">· ${esc(p.works_at.join(", "))}</span>`:""}${(p.same_as||[]).map(s=>`<button class="chip" data-from="${p.uid}" data-into="${s}">same as ${esc((NODES[s]||{}).name||s)}?</button>`).join("")}</div><div class="row"><button class="ghost" data-open="${p.uid}">open between</button><button class="danger" data-forget="${p.uid}">forget</button></div></div>`).join("");

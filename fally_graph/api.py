@@ -12,9 +12,18 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from . import model as M, reader, writer
-from .db import UserGraph, list_users
+from .db import UserGraph, list_users, trace_start
 
 app = FastAPI(title="Fally memory graph on FalkorDB", version="0.1.0")
+
+
+@app.middleware("http")
+async def _falkordb_trace(request: Request, call_next):
+    """Every response says how many Cypher queries it sent to FalkorDB (header X-FalkorDB-Queries)."""
+    t = trace_start()
+    resp = await call_next(request)
+    resp.headers["X-FalkorDB-Queries"] = str(len(t))
+    return resp
 STATIC = Path(__file__).parent / "static"
 DEMO_USERS_ONLY = os.environ.get("DEMO_USERS_ONLY", "0") == "1"
 
@@ -127,7 +136,10 @@ def why(user_id: str, uid: str):
 
 @app.get("/api/users/{user_id}/open-between/{person_uid}")
 def open_between(user_id: str, person_uid: str):
-    return reader.open_between(_existing(user_id), person_uid)
+    out = reader.open_between(_existing(user_id), person_uid)
+    if isinstance(out, dict):
+        out["falkordb"] = _trace_now()
+    return out
 
 
 class ContextBody(BaseModel):
@@ -142,7 +154,13 @@ def context(user_id: str, body: ContextBody):
     t = time.perf_counter()
     out = reader.get_context(_existing(user_id), body.question, body.allowed_categories, body.tier_max, body.people)
     out["ms"] = round((time.perf_counter() - t) * 1000, 1)
+    out["falkordb"] = _trace_now()
     return out
+
+
+def _trace_now() -> list:
+    from .db import _trace
+    return list(_trace.get() or [])
 
 
 class MergeBody(BaseModel):

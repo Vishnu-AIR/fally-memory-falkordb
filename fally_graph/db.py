@@ -7,8 +7,10 @@ touch another user's data, and deleting a user is `graph.delete()`.
 
 from __future__ import annotations
 
+import contextvars
 import os
 import threading
+import time
 from typing import Any
 
 from falkordb import FalkorDB
@@ -19,6 +21,26 @@ _db: FalkorDB | None = None
 _locks: dict[str, threading.RLock] = {}
 _locks_guard = threading.Lock()
 _ready: set[str] = set()
+
+# Per-request log of the Cypher sent to FalkorDB, so the API and demo page can show exactly what ran.
+_trace: contextvars.ContextVar[list | None] = contextvars.ContextVar("falkordb_trace", default=None)
+
+
+def trace_start() -> list:
+    t: list = []
+    _trace.set(t)
+    return t
+
+
+def _log(graph: str, cypher: str, res, t0: float, mode: str) -> None:
+    t = _trace.get()
+    if t is None or len(t) >= 60:
+        return
+    server_ms = getattr(res, "run_time_ms", None)
+    t.append({"graph": graph, "mode": mode, "cypher": " ".join(cypher.split())[:400],
+              "rows": len(res.result_set or []),
+              "server_ms": round(float(server_ms), 3) if server_ms is not None else None,
+              "ms": round((time.perf_counter() - t0) * 1000, 2)})
 
 
 def db() -> FalkorDB:
@@ -48,12 +70,16 @@ class UserGraph:
             self.lock = _locks.setdefault(self.name, threading.RLock())
 
     def q(self, cypher: str, params: dict | None = None) -> list[dict]:
+        t0 = time.perf_counter()
         res = self.g.query(cypher, params or {})
+        _log(self.name, cypher, res, t0, "query")
         header = [h[1] if isinstance(h, (list, tuple)) else h for h in (res.header or [])]
         return [dict(zip(header, row)) for row in res.result_set]
 
     def ro(self, cypher: str, params: dict | None = None) -> list[dict]:
+        t0 = time.perf_counter()
         res = self.g.ro_query(cypher, params or {})
+        _log(self.name, cypher, res, t0, "ro_query")
         header = [h[1] if isinstance(h, (list, tuple)) else h for h in (res.header or [])]
         return [dict(zip(header, row)) for row in res.result_set]
 

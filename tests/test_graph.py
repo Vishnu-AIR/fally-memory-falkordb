@@ -314,3 +314,18 @@ def test_mcp_tool_and_http_api():
     assert "Zara" not in text  # family whatsapp chat: whatsapp is off for this connection
     assert c.get("/api/users/nobody/people").status_code == 404
     assert c.get("/api/users/..%2Fx/people").status_code in (400, 404)
+
+
+def test_responses_show_the_falkordb_queries_that_ran():
+    from fastapi.testclient import TestClient
+    from fally_graph.api import app
+    from synth.load import load_user
+    load_user("asha")
+    c = TestClient(app)
+    h = c.get("/api/health").json()
+    assert h["graph_db"]["engine"] == "FalkorDB" and h["graph_db"]["graphs"] >= 1 and "version" in h["graph_db"]
+    r = c.post("/api/users/asha/context", json={"question": "What is open between me and Tomas?"})
+    assert int(r.headers["X-FalkorDB-Queries"]) >= 1
+    fq = r.json()["falkordb"]
+    assert fq and all(q["graph"] == "fally_user_asha" for q in fq)
+    assert any("MATCH" in q["cypher"] for q in fq)
