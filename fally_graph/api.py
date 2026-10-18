@@ -48,7 +48,27 @@ def index():
 def health():
     t = time.perf_counter()
     users = list_users()
-    return {"ok": True, "users": len(users), "ms": round((time.perf_counter() - t) * 1000, 1)}
+    return {"ok": True, "users": len(users), "ms": round((time.perf_counter() - t) * 1000, 1),
+            "graph_db": _falkor_info(), "host": os.environ.get("DEPLOY_HOST", "local")}
+
+
+def _falkor_info() -> dict[str, Any]:
+    """Which graph database answers this API: FalkorDB version and how many per-user graphs it holds."""
+    from .db import db
+    info: dict[str, Any] = {"engine": "FalkorDB"}
+    try:
+        conn = db().connection
+        for mod in conn.execute_command("MODULE", "LIST"):
+            m = {mod[i].decode() if isinstance(mod[i], bytes) else mod[i]: mod[i + 1] for i in range(0, len(mod) - 1, 2)}
+            name = m.get("name")
+            name = name.decode() if isinstance(name, bytes) else name
+            if name == "graph":
+                v = int(m.get("ver", 0))
+                info["version"] = f"{v // 10000}.{v // 100 % 100}.{v % 100}"
+        info["graphs"] = len(db().list_graphs())
+    except Exception as e:  # health must never fail because of this
+        info["error"] = type(e).__name__
+    return info
 
 
 @app.get("/api/users")

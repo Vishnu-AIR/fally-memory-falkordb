@@ -30,7 +30,7 @@ All data in this repo and in the live demo is **synthetic** (`synth/generate.py`
 - **One graph per user** (`select_graph("fally_user_<id>")`), so a user's memory is isolated by construction and
   "delete my data" is one `graph.delete()`.
 - **Full-text index with fuzzy matching** powers "same as?" person candidates and quote search in `get_context`.
-- **Runs the same everywhere:** `docker compose up` locally, the live demo on a small AWS Graviton (arm64) instance,
+- **Runs the same everywhere:** `docker compose up` locally, the live demo on FalkorDB hosted on a small AWS Graviton (arm64) instance (see "FalkorDB on AWS"),
   and the tests in GitHub Actions against a FalkorDB service container (`.github/workflows/tests.yml`).
 - **A bug we found:** fixed-length variable-length patterns (`-[*2]-`) crash the server and `-[:W*2]-` returns no
   rows on v4.22.0 and v4.22.1. Minimal repro: `scripts/repro_varlen_bug.sh`. Our queries use `*1..k` instead.
@@ -238,11 +238,29 @@ contested claims, idempotent weights, merge and exact undo, never merging Self, 
 bounded path avoiding Self, open-between, the privacy filter (categories, `sens`, the relationships switch), forget,
 "which person?" for a shared first name, the synthetic seed end to end, and the MCP tool over HTTP.
 
-## Live demo deployment
+## FalkorDB on AWS (the live demo)
 
-One AWS `t4g.small` (arm64), Docker Compose with FalkorDB (not exposed), the API, and Caddy for HTTPS
-(`docker-compose.aws.yml`, `Caddyfile`). Only ports 80 and 443 are open; there is no SSH. On the live demo, writes
-are limited to the synthetic users and "Reset data" reloads them.
+The live demo at https://falkor.fally.online is FalkorDB hosted on AWS: one `t4g.small` Graviton (arm64) instance
+running Docker Compose with FalkorDB, the API and Caddy for HTTPS.
+
+```mermaid
+flowchart LR
+  B["Browser / MCP client"] -->|HTTPS 443| C["Caddy"]
+  subgraph EC2["AWS EC2 t4g.small (arm64)"]
+    C --> A["FastAPI (fally_graph)"]
+    A -->|"Cypher over 6379 (private)"| F[("FalkorDB<br/>one graph per user")]
+  end
+```
+
+- Only ports 80 and 443 are open. FalkorDB (6379) and the API (8000) are not reachable from outside, and there is
+  no SSH (access is through AWS Systems Manager).
+- `GET https://falkor.fally.online/api/health` shows which graph database answers: the FalkorDB version, how many
+  per-user graphs it holds, and the host.
+- On the live demo, writes are limited to the synthetic users, and "Reset data" reloads them.
+- To create the same setup in your own AWS account: `REGION=us-east-1 DOMAIN=falkor.example.com scripts/aws/deploy.sh`
+  (security group, SSM role, instance with Docker, clone, compose up, seed), then point the domain at the printed IP.
+
+On a running box, the same thing by hand:
 
 ```bash
 DOMAIN=falkor.fally.online docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --build

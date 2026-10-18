@@ -5,6 +5,7 @@ services:
     ports: !reset []
     environment:
       DEMO_USERS_ONLY: "1"
+      DEPLOY_HOST: "aws-ec2-t4g.small (arm64, Graviton)"
     restart: unless-stopped
   falkordb:
     restart: unless-stopped
