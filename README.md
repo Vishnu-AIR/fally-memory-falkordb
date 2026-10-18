@@ -1,5 +1,7 @@
 # Fally memory graph on FalkorDB
 
+[![tests](https://github.com/Vishnu-AIR/fally-memory-falkordb/actions/workflows/tests.yml/badge.svg)](https://github.com/Vishnu-AIR/fally-memory-falkordb/actions/workflows/tests.yml)
+
 **Live demo:** https://falkor.fally.online (synthetic users only)
 **Demo video:** YouTube: TBA
 **Built for:** WeMakeDevs Graph Hacks (FalkorDB), during the event (Oct 15 to 18, 2026).
@@ -20,6 +22,18 @@ your life. This repo is **the memory graph part only**, rebuilt with **FalkorDB 
   filtered by the categories that connection may see and by sensitivity (`sens`).
 
 All data in this repo and in the live demo is **synthetic** (`synth/generate.py`). No real people.
+
+## FalkorDB in this project, at a glance
+
+- **Primary graph database.** Every read and write of the memory graph is Cypher against FalkorDB. All queries are in
+  `fally_graph/queries.py`.
+- **One graph per user** (`select_graph("fally_user_<id>")`), so a user's memory is isolated by construction and
+  "delete my data" is one `graph.delete()`.
+- **Full-text index with fuzzy matching** powers "same as?" person candidates and quote search in `get_context`.
+- **Runs the same everywhere:** `docker compose up` locally, the live demo on a small AWS Graviton (arm64) instance,
+  and the tests in GitHub Actions against a FalkorDB service container (`.github/workflows/tests.yml`).
+- **A bug we found:** fixed-length variable-length patterns (`-[*2]-`) crash the server and `-[:W*2]-` returns no
+  rows on v4.22.0 and v4.22.1. Minimal repro: `scripts/repro_varlen_bug.sh`. Our queries use `*1..k` instead.
 
 ## Multi-tenancy: one FalkorDB graph per user
 
