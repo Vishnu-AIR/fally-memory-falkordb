@@ -1,0 +1,25 @@
+# Live demo: adds Caddy (automatic HTTPS) in front of the API. FalkorDB and the API are not published.
+#   DOMAIN=falkor.fally.online docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d --build
+services:
+  api:
+    ports: !reset []
+    environment:
+      DEMO_USERS_ONLY: "1"
+    restart: unless-stopped
+  falkordb:
+    restart: unless-stopped
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - api
+volumes:
+  caddy-data:

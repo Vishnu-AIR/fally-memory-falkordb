@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fally Memory Graph</title>
+<script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+<style>
+:root{--bg:#f7f6f3;--panel:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e3e1dc;--accent:#5b4bdb;--accent2:#ece9ff;--warn:#b4441f;--ok:#2e7d4f}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#141416;--panel:#1d1d20;--ink:#ececf0;--mute:#9a9aa3;--line:#2e2e33;--accent:#9d92ff;--accent2:#2a2648;--warn:#ff8a65;--ok:#7fd69e}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif}
+header{padding:18px 16px 8px;max-width:1280px;margin:auto}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--mute);margin:0}
+main{max-width:1280px;margin:auto;padding:8px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:16px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);margin:0 0 10px}
+select,input,button,textarea{font:inherit;color:inherit}
+select,input[type=text]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;max-width:100%}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+button.danger{background:transparent;color:var(--warn);border:1px solid var(--line)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.q{flex:1;min-width:200px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.chip{background:var(--accent2);color:var(--accent);border-radius:999px;padding:3px 10px;font-size:12px;cursor:pointer;border:0}
+.cats label{display:inline-flex;gap:4px;align-items:center;margin:2px 10px 2px 0;font-size:13px}
+.sec h3{font-size:14px;margin:12px 0 6px}
+.item{padding:7px 0;border-top:1px solid var(--line)}
+.cite{color:var(--mute);font-size:12px}
+.quote{color:var(--mute);font-style:italic;font-size:12px}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:0 5px;color:var(--mute);margin-left:4px}
+#net{height:460px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.people .p{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.muted{color:var(--mute)}
+pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;max-height:260px;overflow:auto}
+.ms{font-size:12px;color:var(--mute)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Fally memory graph on FalkorDB</h1>
+  <p class="sub">A private memory layer: each (synthetic) user is their own FalkorDB graph. Ask a question as an outside AI would, and see the small cited slice Fally would share, filtered by the categories that connection is allowed.</p>
+</header>
+<main>
+<section>
+  <div class="card">
+    <h2>1. Pick a synthetic user</h2>
+    <div class="row"><select id="user"></select><span id="about" class="muted"></span>
+      <button class="ghost" id="reset" title="Reload this user's synthetic data">Reset data</button></div>
+  </div>
+  <div class="card">
+    <h2>2. What this connection may see</h2>
+    <div class="cats" id="cats"></div>
+    <div class="row" style="margin-top:6px"><label>Sensitivity tier max
+      <select id="tier"><option value="0">0 ordinary</option><option value="1" selected>1 personal</option><option value="2">2 intimate (needs relationships)</option></select></label></div>
+  </div>
+  <div class="card">
+    <h2>3. Ask</h2>
+    <div class="row"><input type="text" id="question" class="q" placeholder="What's open between me and Tomas?"><button id="ask">get_context</button></div>
+    <div class="chips" id="examples"></div>
+    <div id="result"></div>
+  </div>
+</section>
+<section>
+  <div class="card">
+    <h2>Graph <span class="ms" id="gmeta"></span></h2>
+    <div id="net"></div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Click a node for its depth-2 neighbourhood (never through "you"), click an edge to see why Fally believes it.</p>
+  </div>
+  <div class="card"><h2>Why / details</h2><div id="why" class="muted">Click a node or an edge.</div></div>
+  <div class="card">
+    <h2>Path between two entities</h2>
+    <div class="row"><select id="pa"></select><select id="pb"></select><button class="ghost" id="go">Find path</button></div>
+    <div id="pathout" class="muted" style="margin-top:8px"></div>
+  </div>
+  <div class="card people"><h2>People</h2><div id="people"></div><div id="merge-msg" class="ms"></div></div>
+</section>
+</main>
+<script>
+const CATS=["about_me","people","plans","calendar","conversations","mail","whatsapp","relationships"];
+const ON=new Set(["about_me","people","plans","calendar","conversations"]);
+const EX={asha:["What's open between me and Tomas?","Where does Tomas Reyes work now?","What do I know about Rohan?","Who is Jonah Pike?","What am I waiting on?"],
+ dev:["What's open between me and Mira?","Where does Oren live?","What did Kofi promise?","Who is Tomas Reyes?"],
+ lina:["What's open with Hana?","Who is Pablo Ortiz?","What do I owe Pablo?"]};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let user=null, net=null, nodesDS=null, edgesDS=null, lastMerge=null, NODES={};
+async function api(path,opt){const r=await fetch(path,opt);const j=await r.json();if(!r.ok)throw new Error(j.error||j.detail||r.status);return j}
+function catsUI(){$("#cats").innerHTML=CATS.map(c=>`<label><input type="checkbox" value="${c}" ${ON.has(c)?"checked":""}>${c}</label>`).join("")}
+async function loadUsers(){const us=await api("/api/users");$("#user").innerHTML=us.map(u=>`<option value="${u.id}" data-about="${esc(u.about)}">${esc(u.name)} (${u.graph})</option>`).join("");pick()}
+async function pick(){user=$("#user").value;const o=$("#user").selectedOptions[0];$("#about").textContent=o?o.dataset.about:"";
+ $("#examples").innerHTML=(EX[user]||[]).map(q=>`<button class="chip">${esc(q)}</button>`).join("");
+ document.querySelectorAll("#examples .chip").forEach(b=>b.onclick=()=>{$("#question").value=b.textContent;ask()});
+ $("#result").innerHTML="";await drawGraph();await loadPeople()}
+const COLORS={self:"#5b4bdb",person:"#e07a5f",organisation:"#3d85c6",place:"#2e9e6b",commitment:"#d4a017",project:"#8e6bbf",event:"#00897b",topic:"#7a7a85"};
+async function drawGraph(){const g=await api(`/api/users/${user}/graph`);NODES={};g.nodes.forEach(n=>NODES[n.uid]=n);
+ $("#gmeta").textContent=`${g.nodes.length} nodes, ${g.edges.length} current edges`;
+ nodesDS=new vis.DataSet(g.nodes.map(n=>({id:n.uid,label:n.type==="self"?"You":n.name,color:COLORS[n.type]||"#999",shape:n.type==="self"?"star":"dot",size:n.type==="self"?22:12,font:{color:getComputedStyle(document.body).color,size:12},title:`${n.type}${n.sens?" · sens "+n.sens:""}`})));
+ edgesDS=new vis.DataSet(g.edges.map(e=>({id:e.uid,from:e.src,to:e.dst,label:e.rel.toLowerCase(),arrows:"to",font:{size:9,color:"#888",strokeWidth:0},color:{color:e.sens>=2?"#d9534f":"#aaa"},dashes:e.sens>=2})));
+ const opts={physics:{stabilization:true,barnesHut:{springLength:110}},interaction:{hover:true}};
+ net=new vis.Network($("#net"),{nodes:nodesDS,edges:edgesDS},opts);
+ net.on("click",p=>{if(p.nodes.length)nodeClick(p.nodes[0]);else if(p.edges.length)why(p.edges[0])});
+ const opt=g.nodes.filter(n=>n.type!=="commitment").map(n=>`<option value="${n.uid}">${esc(n.type==="self"?"You":n.name)}</option>`).join("");
+ $("#pa").innerHTML=opt;$("#pb").innerHTML=opt;if($("#pb").options.length>2)$("#pb").selectedIndex=2}
+function highlight(uids,edgeIds){const U=new Set(uids),E=new Set(edgeIds||[]);
+ nodesDS.update(nodesDS.get().map(n=>({id:n.id,opacity:U.size&&!U.has(n.id)?0.15:1})));
+ edgesDS.update(edgesDS.get().map(e=>({id:e.id,hidden:false,width:E.has(e.id)?3:1,color:{color:E.size&&!E.has(e.id)?"rgba(150,150,150,.15)":(E.has(e.id)?"#5b4bdb":"#aaa")}})))}
+async function nodeClick(uid){const nb=await api(`/api/users/${user}/nodes/${uid}/neighbourhood?depth=2`);highlight(nb.nodes.map(n=>n.uid),nb.edges.map(e=>e.uid));
+ const w=await api(`/api/users/${user}/why/${uid}`);
+ $("#why").innerHTML=`<b>${esc(w.fact)}</b> <span class="tag">${nb.nodes.length-1} within 2 hops</span>`+ev(w.evidence)+`<details><summary class="ms">raw JSON</summary><pre>${esc(JSON.stringify(nb,null,1))}</pre></details>`}
+function ev(list){return (list||[]).map(e=>`<div class="item"><span class="quote">"${esc(e.quote)}"</span><div class="cite">${esc(e.title)} · ${esc(e.source_type)} · ${esc((e.ts||"").slice(0,10))} · needs ${esc((e.categories||[]).join(", ")||"none")}</div></div>`).join("")||'<div class="muted">No quotes.</div>'}
+async function why(uid){const w=await api(`/api/users/${user}/why/${uid}`);highlight([],[uid]);
+ $("#why").innerHTML=`<b>${esc(w.fact)}</b><div class="cite">confidence ${w.confidence} · ${esc(w.basis)} · weight ${w.weight} · since ${esc((w.valid_from||"unknown").slice(0,10))}${w.valid_to?" · until "+esc(w.valid_to.slice(0,10)):""}</div>`+ev(w.evidence)}
+async function ask(){const q=$("#question").value.trim();if(!q)return;const allowed=[...document.querySelectorAll("#cats input:checked")].map(i=>i.value);
+ $("#result").innerHTML='<p class="muted">Asking FalkorDB...</p>';
+ try{const r=await api(`/api/users/${user}/context`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({question:q,allowed_categories:allowed,tier_max:+$("#tier").value})});
+ let h=`<p class="ms">${r.ms} ms · ${r.filtered_out||0} items held back by the privacy filter${r.which_person?" · which one? "+esc(r.which_person.join(", ")):""}</p>`;
+ if(!r.sections.length)h+=`<p>${esc(r.text)}</p>`;
+ r.sections.forEach(s=>{h+=`<div class="sec"><h3>${esc(s.title)} <span class="tag">${s.tier}</span></h3>`+s.items.map(i=>{const c=i.source;return `<div class="item">${esc(i.text)}${(i.categories||[]).map(x=>`<span class="tag">${esc(x)}</span>`).join("")}${c?`<div class="cite">${esc(c.title)} · ${esc(c.source_type)} · ${esc(c.when)}</div>`:""}${c&&c.quote&&i.kind!=="quote"?`<div class="quote">"${esc(c.quote)}"</div>`:""}</div>`}).join("")+`</div>`});
+ h+=`<details><summary class="ms">Markdown text an AI receives</summary><pre>${esc(r.text)}</pre></details>`;
+ $("#result").innerHTML=h;const ids=(r.resolved.people||[]).map(p=>p.uid);if(ids.length)nodeClick(ids[0])}catch(e){$("#result").innerHTML=`<p style="color:var(--warn)">${esc(e.message)}</p>`}}
+async function loadPeople(){const ps=await api(`/api/users/${user}/people`);
+ $("#people").innerHTML=ps.map(p=>`<div class="p"><div><b>${esc(p.name)}</b> ${p.works_at.length?`<span class="muted">· ${esc(p.works_at.join(", "))}</span>`:""}${(p.same_as||[]).map(s=>`<button class="chip" data-from="${p.uid}" data-into="${s}">same as ${esc((NODES[s]||{}).name||s)}?</button>`).join("")}</div><div class="row"><button class="ghost" data-open="${p.uid}">open between</button><button class="danger" data-forget="${p.uid}">forget</button></div></div>`).join("");
+ document.querySelectorAll("[data-from]").forEach(b=>b.onclick=async()=>{const r=await api(`/api/users/${user}/merge`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({from_uid:b.dataset.from,into_uid:b.dataset.into})});lastMerge=r.merge;await drawGraph();await loadPeople();$("#merge-msg").innerHTML=`Merged (${r.merge}). <button class="ghost" id="undo">Undo merge</button>`;$("#undo").onclick=async()=>{await api(`/api/users/${user}/merges/${lastMerge}/undo`,{method:"POST"});$("#merge-msg").textContent="Merge undone.";await drawGraph();await loadPeople()}});
+ document.querySelectorAll("[data-open]").forEach(b=>b.onclick=async()=>{const r=await api(`/api/users/${user}/open-between/${b.dataset.open}`);$("#why").innerHTML=`<b>Open between you and ${esc((NODES[b.dataset.open]||{}).name)}</b>`+(r.map(o=>`<div class="item">${o.direction==="you_owe"?"You owe":"They owe"}: ${esc(o.text)} ${o.due?`<span class="tag">due ${esc(o.due.slice(0,10))}</span>`:""}</div>`).join("")||'<div class="muted">Nothing open.</div>')});
+ document.querySelectorAll("[data-forget]").forEach(b=>b.onclick=async()=>{if(!confirm("Forget this person and every quote about them?"))return;const r=await api(`/api/users/${user}/people/${b.dataset.forget}`,{method:"DELETE"});$("#merge-msg").textContent=`Forgot ${r.forgotten}: ${r.nodes_deleted} nodes, ${r.edges_deleted} edges, ${r.quotes_deleted} quotes. Use "Reset data" to bring the demo back.`;await drawGraph();await loadPeople()})}
+$("#go").onclick=async()=>{const r=await api(`/api/users/${user}/path?a=${$("#pa").value}&b=${$("#pb").value}`);
+ if(!r.hops){$("#pathout").textContent="No path within 4 hops that does not go through you.";highlight([],[]);return}
+ $("#pathout").innerHTML=`${r.hops} hop(s): `+r.nodes.map(n=>esc(n.type==="self"?"You":n.name)).join(" → ");highlight(r.nodes.map(n=>n.uid),r.edges.map(e=>e.uid))};
+$("#reset").onclick=async()=>{await api(`/api/users/${user}/reset`,{method:"POST"});$("#merge-msg").textContent="Data reset.";await drawGraph();await loadPeople()};
+$("#ask").onclick=ask;$("#question").addEventListener("keydown",e=>{if(e.key==="Enter")ask()});$("#user").onchange=pick;
+catsUI();loadUsers();
+</script>
+</body>
+</html>

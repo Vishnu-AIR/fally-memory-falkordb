@@ -1,0 +1,22 @@
+# Local: FalkorDB + the API on http://localhost:8000
+services:
+  falkordb:
+    image: falkordb/falkordb:v4.22.0
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+  api:
+    build: .
+    environment:
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+volumes:
+  falkordb-data:
